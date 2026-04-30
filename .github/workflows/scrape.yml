@@ -1,0 +1,45 @@
+name: Scrape Jobs
+
+on:
+  schedule:
+    # IST 8am and 5pm = UTC 2:30am and 11:30am
+    - cron: "30 2,11 * * *"
+  workflow_dispatch:
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pipeline
+        run: python -m radar.main
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+
+      - name: Commit seen_jobs.db back
+        run: |
+          git config --local user.email "job-radar[bot]@users.noreply.github.com"
+          git config --local user.name "Job Radar Bot"
+          git add seen_jobs.db
+          git diff --cached --exit-code && echo "No changes to commit" || git commit -m "chore: update seen_jobs.db"
+          git push origin HEAD
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

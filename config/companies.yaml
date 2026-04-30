@@ -1,0 +1,39 @@
+# config/companies.yaml — populated by /bootstrap-companies skill
+# last_validated: 2026-04-30
+# Format: list slugs per ATS. Custom entries use {name, url} dict.
+
+greenhouse:
+  - anthropic
+  - stripe
+  - airbnb
+  - smartbear
+  - valtech
+
+lever:
+  - cred
+  - sophos
+  - valorx
+  - cygnate
+  - simform
+  - tatvasoft
+  - middleware
+  - apexon
+  - motadata
+  - anblicks
+  - nubrk
+  - ignosis
+  - dxfactor
+
+ashby: []
+
+workday: []
+
+custom:
+  - {name: "S&P Global", url: "https://jobs.ashbyhq.com/spglobal"}
+  - {name: "BDO India", url: "https://jobs.ashbyhq.com/bdo-india"}
+  - {name: "Gantner India", url: "https://jobs.ashbyhq.com/gantner-india"}
+  - {name: "Trading Technologies", url: "https://jobs.ashbyhq.com/trading-technologies"}
+  - {name: "Qatar Airways India", url: "https://jobs.ashbyhq.com/qatar-airways-india"}
+  - {name: "Bank of America India", url: "https://jobs.ashbyhq.com/bank-of-america"}
+  - {name: "Deloitte India", url: "https://jobs.ashbyhq.com/deloitte-india"}
+  - {name: "Aubergine Solutions", url: "https://jobs.ashbyhq.com/aubergine-solutions"}

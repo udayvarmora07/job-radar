@@ -1,0 +1,52 @@
+# config/search.yaml — filter and scoring configuration
+target_titles:
+  - devops engineer
+  - sre
+  - cloud engineer
+  - platform engineer
+  - kubernetes engineer
+  - gitops engineer
+  - site reliability engineer
+
+excluded_titles:
+  - senior
+  - lead
+  - principal
+  - staff
+  - manager
+  - director
+  - head
+
+excluded_locations:
+  - united states
+  - usa
+  - uk
+  - europe
+  - canada
+  - australia
+
+skill_keywords:
+  kubernetes: 15
+  k8s: 10
+  eks: 8
+  terraform: 12
+  aws: 10
+  gcp: 6
+  azure: 5
+  docker: 8
+  gitops: 10
+  argocd: 8
+  github actions: 7
+  ci/cd: 8
+  prometheus: 7
+  grafana: 6
+  loki: 5
+  helm: 6
+  linux: 5
+  python: 5
+  bash: 4
+  ansible: 5
+  vault: 5
+  jenkins: 4
+
+min_score: 20

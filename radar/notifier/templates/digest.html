@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Job Radar Digest</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
+    .container { max-width: 700px; margin: 0 auto; }
+    h1 { background: #2d6a4f; color: white; padding: 16px; border-radius: 8px 8px 0 0; margin: 0; }
+    .subtitle { background: #2d6a4f; color: #d8f3dc; padding: 0 16px 16px; font-size: 14px; }
+    .job-card { background: white; border-left: 4px solid #2d6a4f; margin: 12px 0; padding: 16px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .job-title { font-size: 16px; font-weight: bold; color: #1b4332; margin: 0 0 4px; }
+    .job-meta { font-size: 13px; color: #666; margin: 4px 0; }
+    .job-score { display: inline-block; background: #d8f3dc; color: #2d6a4f; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+    .job-desc { font-size: 13px; color: #444; margin: 8px 0; line-height: 1.5; }
+    .apply-btn { display: inline-block; background: #40916c; color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px; font-size: 13px; }
+    .footer { text-align: center; font-size: 11px; color: #999; margin-top: 24px; }
+    .tier { font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+    .tier.strong { color: #2d6a4f; }
+    .tier.moderate { color: #b5830a; }
+    .tier.weak { color: #999; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Job Radar Digest</h1>
+    <div class="subtitle">{{ count }} new role{{ "s" if count != 1 else "" }} matched your profile</div>
+
+    {% for job in jobs %}
+    <div class="job-card">
+      <div class="tier {{ "strong" if job.score >= 60 else "moderate" if job.score >= 30 else "weak" }}">
+        {{ "Strong match" if job.score >= 60 else "Moderate" if job.score >= 30 else "Weak match" }}
+        &mdash; score {{ job.score }}
+      </div>
+      <div class="job-title">{{ job.title }}</div>
+      <div class="job-meta">{{ job.company }} &bull; {{ job.location }} &bull; {{ job.source }}</div>
+      {% if job.posted_at %}
+      <div class="job-meta">Posted: {{ job.posted_at }}</div>
+      {% endif %}
+      {% if job.description %}
+      <div class="job-desc">{{ job.description[:200] }}{% if job.description|length > 200 %}...{% endif %}</div>
+      {% endif %}
+      <a class="apply-btn" href="{{ job.url }}" target="_blank">View &amp; Apply</a>
+    </div>
+    {% endfor %}
+
+    <div class="footer">
+      Job Radar &mdash; automated job monitoring pipeline for DevOps/SRE/Cloud roles in India + remote.
+      Not intended to be a job application. Do not reply to this email.
+    </div>
+  </div>
+</body>
+</html>
