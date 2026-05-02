@@ -6,6 +6,9 @@ on:
     - cron: "30 2,11 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
@@ -14,8 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,7 +40,4 @@ jobs:
           git config --local user.email "job-radar[bot]@users.noreply.github.com"
           git config --local user.name "Job Radar Bot"
           git add seen_jobs.db
-          git diff --cached --exit-code && echo "No changes to commit" || git commit -m "chore: update seen_jobs.db"
-          git push origin HEAD
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git diff --cached --exit-code && echo "No changes to commit" || git commit -m "chore: update seen_jobs.db" && git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git HEAD
