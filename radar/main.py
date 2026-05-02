@@ -52,9 +52,8 @@ def _scrape_all() -> list[JobPost]:
                 log.error("Scraper error for %s/%s: %s", ats_name, slug, e)
                 continue
 
-    # --- Generic job board searches across all supported sites ---
-    # naukri blocked by captcha but kept for when it works; linkedin works reliably
-    sites = ["linkedin", "naukri", "indeed"]
+    # --- Generic job board searches (linkedin only — naukri blocked by captcha) ---
+    sites = ["linkedin"]  # naukri blocked by captcha on every request
     searches = [
         # Role-based (remote India)
         ("DevOps Engineer India Remote", True),
