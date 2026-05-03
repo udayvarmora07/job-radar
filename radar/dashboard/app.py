@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 log = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent.parent
+JSON_PATH = BASE_DIR / "jobs.json"
 DB_PATH = BASE_DIR / "seen_jobs.db"
 STATIC_DIR = BASE_DIR / "radar" / "dashboard" / "static"
 
@@ -34,6 +35,29 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+def _sync_db_from_github() -> None:
+    """Pull latest seen_jobs.db from GitHub on startup (for hosted deployments)."""
+    import os
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if not token:
+        log.warning("GITHUB_TOKEN not set — skipping DB sync")
+        return
+    db_url = (
+        f"https://x-access-token:{token}@raw.githubusercontent.com/"
+        f"udayvarmora07/job-radar/main/seen_jobs.db"
+    )
+    try:
+        import urllib.request
+        urllib.request.urlretrieve(db_url, str(DB_PATH))
+        log.info("synced seen_jobs.db from GitHub")
+    except Exception as e:
+        log.warning("DB sync failed: %s", e)
+
+
+# Try to sync DB from GitHub on startup (for hosted deployments)
+_sync_db_from_github()
 
 
 def _query_jobs() -> list[dict]:
