@@ -40,13 +40,8 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 def _sync_db_from_github() -> None:
     """Pull latest seen_jobs.db from GitHub on startup (for hosted deployments)."""
     import os
-    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-    if not token:
-        log.warning("GITHUB_TOKEN not set — skipping DB sync")
-        return
     db_url = (
-        f"https://x-access-token:{token}@raw.githubusercontent.com/"
-        f"udayvarmora07/job-radar/main/seen_jobs.db"
+        "https://raw.githubusercontent.com/udayvarmora07/job-radar/main/seen_jobs.db"
     )
     try:
         import urllib.request
@@ -149,3 +144,21 @@ async def list_jobs(
 async def jobs_json():
     """Serve all jobs as raw JSON (direct DB query)."""
     return JSONResponse(content=_query_jobs())
+
+
+@app.get("/api/debug")
+async def debug():
+    """Debug info: DB path, file size, row count."""
+    import os
+    info = {
+        "db_path": str(DB_PATH),
+        "db_exists": DB_PATH.exists(),
+        "db_size_bytes": DB_PATH.stat().st_size if DB_PATH.exists() else 0,
+        "raw_github_url": "https://raw.githubusercontent.com/udayvarmora07/job-radar/main/seen_jobs.db",
+    }
+    jobs = _query_jobs()
+    info["jobs_in_db"] = len(jobs)
+    if jobs:
+        info["top_score"] = max(j.get("score") or 0 for j in jobs)
+        info["sample"] = jobs[0]
+    return JSONResponse(content=info)
