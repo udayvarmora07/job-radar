@@ -1,9 +1,9 @@
 """FastAPI app for the Job Radar dashboard."""
 from __future__ import annotations
 
-import json
 import logging
 import sqlite3
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -12,13 +12,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from radar.filters import filter_and_score
+from radar.models import JobPost
+from radar.scrapers import jobspy_runner
+
 log = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent.parent
-JSON_PATH = BASE_DIR / "jobs.json"
-DB_PATH = BASE_DIR / "seen_jobs.db"
 STATIC_DIR = BASE_DIR / "radar" / "dashboard" / "static"
-
+DB_PATH = BASE_DIR / "seen_jobs.db"
 
 app = FastAPI(
     title="Job Radar",
@@ -36,13 +38,16 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+# ─── Cache ────────────────────────────────────────────────────────────────────
+
+CACHE_TTL_SECONDS = 900  # 15 minutes
+
+_cache: dict = {"jobs": [], "timestamp": 0.0}
+
 
 def _sync_db_from_github() -> None:
-    """Pull latest seen_jobs.db from GitHub on startup (for hosted deployments)."""
-    import os
-    db_url = (
-        "https://raw.githubusercontent.com/udayvarmora07/job-radar/main/seen_jobs.db"
-    )
+    """Pull latest seen_jobs.db from GitHub on startup."""
+    db_url = "https://raw.githubusercontent.com/udayvarmora07/job-radar/main/seen_jobs.db"
     try:
         import urllib.request
         urllib.request.urlretrieve(db_url, str(DB_PATH))
@@ -51,22 +56,17 @@ def _sync_db_from_github() -> None:
         log.warning("DB sync failed: %s", e)
 
 
-# Try to sync DB from GitHub on startup (for hosted deployments)
-_sync_db_from_github()
-
-
-def _query_jobs() -> list[dict]:
-    """Load all jobs from seen_jobs.db, sorted by score desc."""
+def _load_from_db() -> list[dict]:
+    """Load all jobs from seen_jobs.db."""
+    if not DB_PATH.exists():
+        return []
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT source, company, title, location, url, external_id,
-                   posted_at, description, score
-            FROM seen_jobs
-            ORDER BY score DESC, posted_at DESC
-        """)
+        cur = conn.execute(
+            "SELECT source, company, title, location, url, external_id, posted_at, score "
+            "FROM seen_jobs ORDER BY score DESC, posted_at DESC"
+        )
         rows = cur.fetchall()
         conn.close()
         return [dict(r) for r in rows]
@@ -75,90 +75,141 @@ def _query_jobs() -> list[dict]:
         return []
 
 
+def _scrape_and_filter() -> list[dict]:
+    """Re-scrape LinkedIn and return filtered + scored jobs."""
+    searches = [
+        ("DevOps Engineer India Remote", True),
+        ("SRE Engineer India Remote", True),
+        ("Cloud Engineer India Remote", True),
+        ("Platform Engineer India Remote", True),
+        ("Site Reliability Engineer India Remote", True),
+        ("Kubernetes Engineer India Remote", True),
+        ("GitOps Engineer India Remote", True),
+        ("Infrastructure Engineer India Remote", True),
+        ("DevOps Engineer Bangalore", False),
+        ("DevOps Engineer Pune", False),
+        ("DevOps Engineer Hyderabad", False),
+        ("DevOps Engineer Chennai", False),
+        ("DevOps Engineer Mumbai", False),
+        ("DevOps Engineer Ahmedabad", False),
+        ("DevOps Engineer Noida Gurgaon", False),
+        ("SRE Engineer Bangalore Pune", False),
+        ("Cloud Engineer Mumbai Bangalore", False),
+    ]
+    jobs: list[JobPost] = []
+    for search_term, is_remote in searches:
+        config = jobspy_runner.JobSpyConfig(
+            site_names=["linkedin"],
+            search_term=search_term,
+            location="India",
+            is_remote=is_remote,
+            results_wanted=15,
+        )
+        try:
+            for job in jobspy_runner.scrape(config):
+                jobs.append(job)
+        except Exception:
+            pass
+    filtered = filter_and_score(jobs)
+    return [j.model_dump(mode="json") for j in filtered]
+
+
+def _get_jobs() -> list[dict]:
+    age = time.time() - _cache.get("timestamp", 0)
+    if age > CACHE_TTL_SECONDS or not _cache.get("jobs"):
+        fresh = _scrape_and_filter()
+        _cache["jobs"] = fresh
+        _cache["timestamp"] = time.time()
+        log.info("Cache refreshed: %d jobs", len(fresh))
+    return _cache.get("jobs", [])
+
+
+@app.on_event("startup")
+async def startup():
+    _sync_db_from_github()
+    db_jobs = _load_from_db()
+    _cache["jobs"] = db_jobs
+    _cache["timestamp"] = time.time()
+    log.info("Cache pre-warmed from DB: %d jobs", len(db_jobs))
+    import threading
+    def _bg():
+        try:
+            fresh = _scrape_and_filter()
+            _cache["jobs"] = fresh
+            _cache["timestamp"] = time.time()
+            log.info("Background refresh done: %d jobs", len(fresh))
+        except Exception as e:
+            log.error("Background refresh failed: %s", e)
+    threading.Thread(target=_bg, daemon=True).start()
+    print("STARTUP: background thread spawned", flush=True)
+
+
+# ─── Routes ──────────────────────────────────────────────────────────────────
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    """Serve the dashboard UI."""
     with open(BASE_DIR / "radar" / "dashboard" / "templates" / "index.html") as f:
         return f.read()
 
 
 @app.get("/api/jobs")
 async def list_jobs(
-    q: Optional[str] = Query(None, description="Search term"),
-    location: Optional[str] = Query(None, description="Filter by location"),
-    tier: Optional[str] = Query(None, description="Score tier: strong/moderate/weak"),
-    sort: Optional[str] = Query("score", description="Sort by: score, date, company"),
+    q: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+    tier: Optional[str] = Query(None),
+    sort: Optional[str] = Query("score"),
 ):
-    """
-    Return filtered, sorted job list as JSON.
+    jobs = _get_jobs()
 
-    - q: search term (matches title, company, description)
-    - location: 'remote' or city name
-    - tier: 'strong' (>=20), 'moderate' (10-19), 'weak' (<10)
-    - sort: 'score' (default), 'date', 'company'
-    """
-    jobs = _query_jobs()
-
-    # Search filter
     if q:
         q_lower = q.lower()
-        jobs = [
-            j for j in jobs
-            if q_lower in (j.get("title") or "").lower()
-            or q_lower in (j.get("company") or "").lower()
-            or q_lower in (j.get("description") or "").lower()
-        ]
+        jobs = [j for j in jobs
+                if q_lower in (j.get("title") or "").lower()
+                or q_lower in (j.get("company") or "").lower()]
 
-    # Location filter
     if location:
         loc_lower = location.lower()
         if loc_lower == "remote":
-            jobs = [j for j in jobs if "remote" in (j.get("location") or "").lower()
-                    or "wfh" in (j.get("location") or "").lower()
-                    or "work from home" in (j.get("location") or "").lower()]
+            jobs = [j for j in jobs if
+                not j.get("location") or
+                any(k in (j.get("location") or "").lower()
+                    for k in ("remote", "wfh", "work from home"))]
         else:
             jobs = [j for j in jobs if loc_lower in (j.get("location") or "").lower()]
 
-    # Score tier filter — recalibrated to actual score range (max=33)
     if tier:
-        tier_lower = tier.lower()
-        if tier_lower == "strong":
+        if tier == "strong":
             jobs = [j for j in jobs if (j.get("score") or 0) >= 20]
-        elif tier_lower == "moderate":
+        elif tier == "moderate":
             jobs = [j for j in jobs if 10 <= (j.get("score") or 0) < 20]
-        elif tier_lower == "weak":
+        elif tier == "weak":
             jobs = [j for j in jobs if 0 < (j.get("score") or 0) < 10]
 
-    # Sort
     if sort == "date":
         jobs.sort(key=lambda j: j.get("posted_at") or "", reverse=True)
     elif sort == "company":
         jobs.sort(key=lambda j: (j.get("company") or "").lower())
-    else:  # score
+    else:
         jobs.sort(key=lambda j: j.get("score") or 0, reverse=True)
 
     return JSONResponse(content={"count": len(jobs), "jobs": jobs})
 
 
-@app.get("/jobs.json")
-async def jobs_json():
-    """Serve all jobs as raw JSON (direct DB query)."""
-    return JSONResponse(content=_query_jobs())
+@app.get("/api/refresh")
+async def force_refresh():
+    """Force blocking cache refresh."""
+    fresh = _scrape_and_filter()
+    _cache["jobs"] = fresh
+    _cache["timestamp"] = time.time()
+    log.info("Force refresh: %d jobs", len(fresh))
+    return JSONResponse(content={"status": "ok", "count": len(fresh)})
 
 
 @app.get("/api/debug")
 async def debug():
-    """Debug info: DB path, file size, row count."""
-    import os
-    info = {
-        "db_path": str(DB_PATH),
-        "db_exists": DB_PATH.exists(),
-        "db_size_bytes": DB_PATH.stat().st_size if DB_PATH.exists() else 0,
-        "raw_github_url": "https://raw.githubusercontent.com/udayvarmora07/job-radar/main/seen_jobs.db",
-    }
-    jobs = _query_jobs()
-    info["jobs_in_db"] = len(jobs)
-    if jobs:
-        info["top_score"] = max(j.get("score") or 0 for j in jobs)
-        info["sample"] = jobs[0]
-    return JSONResponse(content=info)
+    age = time.time() - _cache.get("timestamp", 0)
+    return JSONResponse(content={
+        "cached_jobs": len(_cache.get("jobs", [])),
+        "cache_age_seconds": round(age, 1),
+        "cache_fresh": age < CACHE_TTL_SECONDS,
+    })
