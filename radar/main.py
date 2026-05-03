@@ -3,10 +3,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
-
-import yaml
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,42 +12,14 @@ from radar.db import dedupe
 from radar.filters import filter_and_score
 from radar.models import JobPost
 from radar.notifier.email import send_digest
-from radar.scrapers import greenhouse, lever, ashby, jobspy_runner
+from radar.scrapers import jobspy_runner
 
 log = logging.getLogger(__name__)
 
 
-_SCRAPER_REGISTRY = {
-    "greenhouse": greenhouse,
-    "lever": lever,
-    "ashby": ashby,
-}
-
-
-def _load_yaml(path: str) -> dict:
-    with open(path) as f:
-        return yaml.safe_load(f)
-
-
 def _scrape_all() -> list[JobPost]:
-    """Scrape all sources — ATS boards + generic job board searches."""
-    companies = _load_yaml("config/companies.yaml")
+    """Scrape all sources — generic job board searches only."""
     jobs = []
-
-    # --- ATS boards (company-specific) ---
-    for ats_name, slugs in companies.items():
-        scraper = _SCRAPER_REGISTRY.get(ats_name)
-        if not scraper:
-            log.warning("No scraper for ATS: %s", ats_name)
-            continue
-        for company in slugs:
-            slug = company if isinstance(company, str) else company.get("slug", "")
-            try:
-                for job in scraper.scrape(slug):
-                    jobs.append(job)
-            except Exception as e:
-                log.error("Scraper error for %s/%s: %s", ats_name, slug, e)
-                continue
 
     # --- Generic job board searches (linkedin only — naukri blocked by captcha) ---
     sites = ["linkedin"]  # naukri blocked by captcha on every request

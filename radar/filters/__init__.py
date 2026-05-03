@@ -1,8 +1,9 @@
-"""Filters and scoring logic. Applies title regex, exclusion keywords, location, and skill scoring."""
+"""Filters and scoring logic. Applies title regex, location, experience, and skill scoring."""
 from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime, timedelta
 from typing import Iterable
 
 from radar.models import JobPost
@@ -11,44 +12,62 @@ log = logging.getLogger(__name__)
 
 # Target job title patterns — DevOps / SRE / Cloud / Platform Engineering roles
 TITLE_ALLOW = re.compile(
-    r"(?:^|\s)(devops|sre|site.?reliability|cloud\s*(?:engineer|ops|operations)|platform\s*engineer|kubernetes|k8s|gitops|infrastructure\s*engineer|release\s*engineer|build\s*engineer|ci/?cd|cd/?ci|cloudops|ops\s*engineer|systems\s*engineer)",
+    r"(?:^|\s)(devops|sre|site.?reliability|cloud\s*(?:engineer|ops|operations)|"
+    r"platform\s*engineer|kubernetes|k8s|gitops|infrastructure\s*engineer|"
+    r"release\s*engineer|build\s*engineer|ci/?cd|cd/?ci|cloudops|ops\s*engineer|systems\s*engineer)",
     re.IGNORECASE,
 )
 
-# Senior-level exclusion patterns
+# Senior-level exclusion patterns in title
 EXCLUDE_SENIOR = re.compile(
-    r"\bsenior\b|lead\b|principal|staff\b|manager|director|head\s|\bsr\.?\b|\barchitect\b",
+    r"\bsenior\b|lead\b|principal|staff\b|manager|director|head\s|\bsr\.?\b",
     re.IGNORECASE,
 )
 
-# Roles requiring 4+ years experience
-EXCLUDE_EXP = re.compile(r"4\s*\+|5\s*\+|6\s*\+|7\s*\+|8\s*\+", re.IGNORECASE)
+# Experience patterns — match when min experience is 6+ years (reject these)
+_EXCLUDE_EXP = re.compile(
+    r"\b(?:6|7|8|9|10)\s*\+\s*(?:years?|yrs?)\b",
+    re.IGNORECASE,
+)
 
-# Location inclusions — India + Remote India (broad match)
+# Experience ranges — reject if lower bound >= 5 (treat 5-7 as too senior)
+_EXCLUDE_RANGE = re.compile(
+    r"\b(\d)\s*(?:-|–)\s*\d{1,2}\s*(?:years?|yrs?)\b",
+    re.IGNORECASE,
+)
+
+# "minimum N years", "at least N years" patterns — reject if N >= 6
+_EXCLUDE_MIN = re.compile(
+    r"\b(?:min(?:imum)?\s*|at\s*least\s*)(\d{1,2})\s*(?:\+\s*)?(?:years?|yrs?)\b",
+    re.IGNORECASE,
+)
+
+# Location inclusions — Remote/WFH + specific WFO cities
 ALLOW_LOCATION = re.compile(
-    r"india|bengaluru|bangalore|mumbai|pune|hyderabad|chennai|kolkata|ahmedabad|"
-    r"gurgaon|noida|thiruvananthapuram|kochi|coimbore|mysore|indore|jaipur|nagpur|"
-    r"remote|work from home|wfh",
+    r"remote|work\s*from\s*home|wfh|"
+    r"ahmedabad|gandhinagar|gift\s*city|"
+    r"mumbai|pune|gurugram|gurgaon|"
+    r"bangalore|bengaluru|hyderabad|vadodara|"
+    r"india\b",
     re.IGNORECASE,
 )
 
-# Location exclusions — non-India major cities
+# Location exclusions — non-India cities
 EXCLUDE_LOCATION = re.compile(
     r"united states|usa\b|uk\b|europe\b|canada|australia|japan|china|singapore|"
-    r"san francisco|new york|seattle|chicago|los angeles|boston|denver|portland|"
+    r"san francisco|new york\b|seattle|chicago|los angeles|boston|denver|portland|"
     r"london|paris|berlin|dublin|toronto|melbourne|sydney",
     re.IGNORECASE,
 )
 
 # Soft-exclusion keywords in title
 EXCLUDE_TITLEKW = re.compile(
-    r"intern(?:ship)?|fresher|junior\s+(?!engineer)|contract\s+(?!devops)",
+    r"intern(?:ship)?|fresher|\bfresher\b|contract\s*(?!devops|sre|cloud)",
     re.IGNORECASE,
 )
 
-# Skill keywords for scoring (title + description)
+# Skill keywords for scoring
 SKILL_KEYWORDS = {
-    # Cloud/DevOps role types (from title)
     "devops": 12,
     "sre": 12,
     "site reliability": 12,
@@ -57,7 +76,6 @@ SKILL_KEYWORDS = {
     "platform engineer": 10,
     "infrastructure engineer": 8,
     "systems engineer": 5,
-    # Tech stack keywords
     "kubernetes": 15,
     "k8s": 10,
     "eks": 8,
@@ -88,9 +106,68 @@ SKILL_KEYWORDS = {
     "redis": 3,
     "rabbitmq": 3,
     "kafka": 3,
-    "helm": 6,
     "argo": 6,
 }
+
+# Max age for job postings (days)
+MAX_JOB_AGE_DAYS = 30
+
+
+def _parse_date(posted_at: str | None) -> datetime | None:
+    """Parse posted_at string into a datetime object."""
+    if not posted_at:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(posted_at[:10], fmt)
+        except ValueError:
+            pass
+    try:
+        return datetime.fromisoformat(posted_at[:10])
+    except ValueError:
+        return None
+
+
+def is_old(job: JobPost) -> bool:
+    """Return True if job is older than MAX_JOB_AGE_DAYS."""
+    if not job.posted_at:
+        return False  # No date = allow (assume recent)
+    dt = _parse_date(job.posted_at)
+    if not dt:
+        return False
+    age = datetime.now() - dt
+    return age.days > MAX_JOB_AGE_DAYS
+
+
+def is_excluded_experience(job: JobPost) -> bool:
+    """
+    Return True if job requires 6+ years experience.
+
+    Checks both title and description. Checks:
+    - Explicit "6+ years", "7+ years" etc. -> reject
+    - Ranges with lower bound >= 6: "6-8 years", "7-10 years" -> reject
+    - "minimum N years" with N >= 6 -> reject
+    - Lower end of range >= 6 -> reject
+    - "3+ years", "2+ years", "5+ years" -> accept (within 0-5 bracket)
+    """
+    combined = (job.title + " " + (job.description or "")).lower()
+
+    if _EXCLUDE_EXP.search(combined):
+        return True
+
+    # Check ranges like "5-7 years" — reject if lower bound >= 5
+    for match in _EXCLUDE_RANGE.finditer(combined):
+        lower = int(match.group(1))
+        if lower >= 5:
+            return True
+
+    # Check minimum expressions like "minimum 6 years" or "at least 6 years"
+    for match in _EXCLUDE_MIN.finditer(combined):
+        years = int(match.group(1))
+        if years >= 6:
+            return True
+
+    return False
 
 
 def filter_title(job: JobPost) -> bool:
@@ -99,22 +176,32 @@ def filter_title(job: JobPost) -> bool:
 
 
 def is_senior_or_excluded(job: JobPost) -> bool:
-    """Return True if job should be excluded due to seniority/experience."""
-    return bool(EXCLUDE_SENIOR.search(job.title)) or bool(EXCLUDE_EXP.search(job.title))
+    """Return True if job has seniority indicators in title."""
+    return bool(EXCLUDE_SENIOR.search(job.title))
 
 
 def is_excluded_location(job: JobPost) -> bool:
-    """Return True if location is NOT India or India-Remote."""
-    # Empty/blank location = allow (job listings often omit it)
-    if not job.location.strip():
+    """
+    Return True if location is NOT WFH/Remote or one of the allowed WFO cities.
+
+    Allowed locations:
+    - Remote / Work From Home / WFH (anywhere)
+    - India + specific cities: Ahmedabad, Gandhinagar, GIFT City, Mumbai, Pune,
+      Gurugram/Gurgaon, Bangalore/Bengaluru, Hyderabad, Vadodara
+    """
+    loc = job.location.strip() if job.location else ""
+
+    # Empty location = allow (generic job posting)
+    if not loc:
         return False
-    # If it matches an exclusion pattern, fail immediately
-    if EXCLUDE_LOCATION.search(job.location):
+
+    # Must be in India AND one of our allowed cities
+    if EXCLUDE_LOCATION.search(loc):
         return True
-    # If it matches an allow pattern (India city, Remote, etc.), pass
-    if ALLOW_LOCATION.search(job.location):
+
+    if ALLOW_LOCATION.search(loc):
         return False
-    # Unknown locations that are neither excluded nor explicitly allowed -> fail
+
     return True
 
 
@@ -134,14 +221,20 @@ def filter_and_score(jobs: Iterable[JobPost]) -> list[JobPost]:
     """Apply all filters and scoring, return sorted list of passing jobs."""
     passing = []
     for job in jobs:
+        if is_old(job):
+            log.debug("Filtered (old): %s @ %s posted=%s", job.title, job.company, job.posted_at)
+            continue
         if not filter_title(job):
             log.debug("Filtered (title): %s @ %s", job.title, job.company)
             continue
         if is_senior_or_excluded(job):
-            log.debug("Filtered (senior/exp): %s @ %s", job.title, job.company)
+            log.debug("Filtered (senior): %s @ %s", job.title, job.company)
             continue
         if is_excluded_location(job):
             log.debug("Filtered (location): %s @ %s", job.title, job.company)
+            continue
+        if is_excluded_experience(job):
+            log.debug("Filtered (experience): %s @ %s", job.title, job.company)
             continue
         if is_excluded_titlekw(job):
             log.debug("Filtered (title kw): %s @ %s", job.title, job.company)
