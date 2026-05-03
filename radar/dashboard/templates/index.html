@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Job Radar — DevOps/SRE/Cloud Jobs India</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="logo">
+        <span class="logo-icon">&#x1F50D;</span>
+        <span class="logo-text">Job Radar</span>
+        <span class="logo-sub">DevOps · SRE · Cloud · Platform</span>
+      </div>
+      <div class="header-meta">
+        <span class="live-badge">
+          <span class="live-dot"></span> Live
+        </span>
+        <span class="job-count" id="total-count">—</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Search & Filters -->
+    <section class="controls">
+      <div class="search-wrap">
+        <input
+          type="search"
+          id="search-input"
+          placeholder="Search title, company, or skills..."
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <span class="search-icon">&#x1F50D;</span>
+      </div>
+
+      <div class="filter-row">
+        <div class="filter-group">
+          <label>Location</label>
+          <select id="filter-location">
+            <option value="">All</option>
+            <option value="remote">Remote / WFH</option>
+            <option value="ahmedabad">Ahmedabad</option>
+            <option value="bangalore">Bangalore</option>
+            <option value="pune">Pune</option>
+            <option value="hyderabad">Hyderabad</option>
+            <option value="mumbai">Mumbai</option>
+            <option value="gurgaon">Gurgaon</option>
+            <option value="chennai">Chennai</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label>Tier</label>
+          <select id="filter-tier">
+            <option value="">All Tiers</option>
+            <option value="strong">Strong Match</option>
+            <option value="moderate">Moderate</option>
+            <option value="weak">Weak Match</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label>Sort by</label>
+          <select id="filter-sort">
+            <option value="score">Best Score</option>
+            <option value="date">Newest</option>
+            <option value="company">Company A-Z</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats bar -->
+    <div class="stats-bar" id="stats-bar">
+      <div class="stat">
+        <span class="stat-num" id="stat-total">—</span>
+        <span class="stat-label">Total</span>
+      </div>
+      <div class="stat stat-strong">
+        <span class="stat-num" id="stat-strong">—</span>
+        <span class="stat-label">Strong</span>
+      </div>
+      <div class="stat stat-moderate">
+        <span class="stat-num" id="stat-moderate">—</span>
+        <span class="stat-label">Moderate</span>
+      </div>
+      <div class="stat stat-weak">
+        <span class="stat-num" id="stat-weak">—</span>
+        <span class="stat-label">Weak</span>
+      </div>
+      <div class="stat stat-updated">
+        <span class="stat-num" id="stat-fresh">—</span>
+        <span class="stat-label">Fresh (&lt;7d)</span>
+      </div>
+    </div>
+
+    <!-- Job grid -->
+    <section class="job-grid" id="job-grid">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Loading jobs...</p>
+      </div>
+    </section>
+
+    <!-- Empty state -->
+    <div class="empty-state" id="empty-state" style="display:none">
+      <p>No jobs match your filters.</p>
+      <button onclick="resetFilters()">Reset filters</button>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Job Radar &mdash; DevOps/SRE/Cloud/Platform Engineer roles in India &amp; Remote-India</p>
+      <p class="footer-sub">Auto-updated 2x daily via GitHub Actions</p>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

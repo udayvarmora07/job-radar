@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+import os
 import sys
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -81,6 +84,12 @@ def run(dry_run: bool = True, verbose: bool = False) -> None:
 
     new_jobs = dedupe(filtered)
     log.info("After dedupe: %d new jobs", len(new_jobs))
+
+    # Export all passing jobs as JSON for the web dashboard
+    export_path = Path("jobs.json")
+    with open(export_path, "w") as f:
+        json.dump([j.model_dump(mode="json") for j in filtered], f, indent=2)
+    log.info("Exported %d jobs to %s", len(filtered), export_path)
 
     if not new_jobs:
         log.info("No new jobs — skipping email")
