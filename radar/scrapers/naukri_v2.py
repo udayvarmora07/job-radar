@@ -60,7 +60,10 @@ def scrape(keyword: str, location: str = "India", pages: int = 3) -> Iterable[Jo
     Yields JobPost objects with all available fields.
     Note: job description is a short snippet only (~1-2 sentences).
     Remote detection is done via keyword matching on title + description.
+    Deduplicates across pages so each external_id appears only once.
     """
+    seen_ids: set[str] = set()
+
     for page in range(1, pages + 1):
         try:
             rows = _fetch_page(keyword, page, location)
@@ -69,6 +72,11 @@ def scrape(keyword: str, location: str = "India", pages: int = 3) -> Iterable[Jo
             continue
 
         for raw in rows:
+            job_id = str(raw.get("jobId", raw.get("unjobid", "")))
+            if not job_id or job_id in seen_ids:
+                continue
+            seen_ids.add(job_id)
+
             posted_str = raw.get("addDate", "")
             if len(posted_str) >= 10:
                 posted_str = posted_str[:10]
@@ -83,11 +91,13 @@ def scrape(keyword: str, location: str = "India", pages: int = 3) -> Iterable[Jo
                 combined,
             ))
 
+            # Parse experience from text field (fallback to numeric fields)
             exp = _parse_exp(raw.get("experience", ""))
             if exp:
                 min_exp, max_exp = exp
             else:
-                min_exp = max_exp = 0
+                min_exp = int(raw.get("minExp", 0) or 0)
+                max_exp = int(raw.get("maxExp", 0) or 0)
 
             # Build location string
             loc_parts = []
@@ -103,9 +113,11 @@ def scrape(keyword: str, location: str = "India", pages: int = 3) -> Iterable[Jo
                 title=title,
                 location=loc,
                 url=str(raw.get("urlStr", "")),
-                external_id=str(raw.get("jobId", raw.get("unjobid", title))),
+                external_id=job_id,
                 posted_at=posted_str or None,
                 description=desc[:5000],
+                min_exp=min_exp,
+                max_exp=max_exp,
             )
 
         if len(rows) < 20:

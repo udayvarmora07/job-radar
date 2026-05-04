@@ -177,6 +177,7 @@ async def list_jobs(
     location: Optional[str] = Query(None),
     tier: Optional[str] = Query(None),
     sort: Optional[str] = Query("score"),
+    source: Optional[str] = Query(None, description="Filter by source: linkedin, indeed, naukri_v2"),
 ):
     jobs = _get_jobs()
 
@@ -203,6 +204,9 @@ async def list_jobs(
             jobs = [j for j in jobs if 10 <= (j.get("score") or 0) < 20]
         elif tier == "weak":
             jobs = [j for j in jobs if 0 < (j.get("score") or 0) < 10]
+
+    if source:
+        jobs = [j for j in jobs if j.get("source") == source]
 
     if sort == "date":
         jobs.sort(key=lambda j: j.get("posted_at") or "", reverse=True)

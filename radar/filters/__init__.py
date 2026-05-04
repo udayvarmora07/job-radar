@@ -143,25 +143,33 @@ def is_excluded_experience(job: JobPost) -> bool:
     """
     Return True if job requires 6+ years experience.
 
-    Checks both title and description. Checks:
-    - Explicit "6+ years", "7+ years" etc. -> reject
-    - Ranges with lower bound >= 6: "6-8 years", "7-10 years" -> reject
-    - "minimum N years" with N >= 6 -> reject
-    - Lower end of range >= 6 -> reject
-    - "3+ years", "2+ years", "5+ years" -> accept (within 0-5 bracket)
+    Checks Naukri's min_exp/max_exp fields (numeric), falls back to
+    title + description text patterns.
+
+    Numeric check: reject if min_exp >= 6.
+    Text patterns checked:
+    - Explicit "6+ years", "7+ years" etc.
+    - Ranges with lower bound >= 5: "5-7 years", "6-8 years"
+    - "minimum N years" with N >= 6
     """
+    # Priority: use numeric Naukri fields if available
+    if job.min_exp is not None:
+        if job.min_exp >= 6:
+            return True
+        # Also reject if max_exp >= 6 AND min_exp is missing/zero (open-ended)
+        if job.max_exp is not None and job.max_exp >= 6 and job.min_exp == 0:
+            return True
+
     combined = (job.title + " " + (job.description or "")).lower()
 
     if _EXCLUDE_EXP.search(combined):
         return True
 
-    # Check ranges like "5-7 years" — reject if lower bound >= 5
     for match in _EXCLUDE_RANGE.finditer(combined):
         lower = int(match.group(1))
         if lower >= 5:
             return True
 
-    # Check minimum expressions like "minimum 6 years" or "at least 6 years"
     for match in _EXCLUDE_MIN.finditer(combined):
         years = int(match.group(1))
         if years >= 6:

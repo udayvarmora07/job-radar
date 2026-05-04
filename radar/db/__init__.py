@@ -27,6 +27,8 @@ def _init_db() -> None:
             location TEXT,
             posted_at TEXT,
             score INTEGER DEFAULT 0,
+            min_exp INTEGER,
+            max_exp INTEGER,
             seen_at TEXT DEFAULT (datetime('now')),
             PRIMARY KEY (source, external_id)
         )
@@ -56,8 +58,8 @@ def insert(job: JobPost) -> None:
     conn.execute(
         """
         INSERT OR REPLACE INTO seen_jobs
-            (source, external_id, company, title, url, location, posted_at, score)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (source, external_id, company, title, url, location, posted_at, score, min_exp, max_exp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             job.source,
@@ -68,6 +70,8 @@ def insert(job: JobPost) -> None:
             job.location,
             job.posted_at,
             job.score,
+            job.min_exp,
+            job.max_exp,
         ),
     )
     conn.commit()

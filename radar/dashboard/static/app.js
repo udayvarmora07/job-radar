@@ -81,6 +81,7 @@ function bindControls() {
   const locationFilter = document.getElementById('filter-location');
   const tierFilter = document.getElementById('filter-tier');
   const sortFilter = document.getElementById('filter-sort');
+  const sourceFilter = document.getElementById('filter-source');
 
   let debounceTimer;
   searchInput.addEventListener('input', () => {
@@ -88,7 +89,7 @@ function bindControls() {
     debounceTimer = setTimeout(applyFilters, 200);
   });
 
-  [locationFilter, tierFilter, sortFilter].forEach(el => {
+  [locationFilter, tierFilter, sortFilter, sourceFilter].forEach(el => {
     el.addEventListener('change', applyFilters);
   });
 }
@@ -98,6 +99,7 @@ function applyFilters() {
   const location = document.getElementById('filter-location').value;
   const tier = document.getElementById('filter-tier').value;
   const sort = document.getElementById('filter-sort').value;
+  const source = document.getElementById('filter-source').value;
 
   let jobs = [...allJobs];
 
@@ -125,6 +127,10 @@ function applyFilters() {
     else if (tier === 'weak') jobs = jobs.filter(j => { const s = j.score || 0; return s > 0 && s < 20; });
   }
 
+  if (source) {
+    jobs = jobs.filter(j => j.source === source);
+  }
+
   if (sort === 'date') {
     jobs.sort((a, b) => (b.posted_at || '').localeCompare(a.posted_at || ''));
   } else if (sort === 'company') {
@@ -140,6 +146,7 @@ function resetFilters() {
   document.getElementById('search-input').value = '';
   document.getElementById('filter-location').value = '';
   document.getElementById('filter-tier').value = '';
+  document.getElementById('filter-source').value = '';
   document.getElementById('filter-sort').value = 'score';
   applyFilters();
 }
