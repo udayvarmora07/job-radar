@@ -104,14 +104,17 @@ def _scrape_and_filter() -> list[dict]:
     jobs: list[JobPost] = []
     for site_names, site_searches in all_sites:
         for search_term, is_remote in site_searches:
-            # Indeed: needs "India" in search_term (location param alone doesn't work)
-            term = f"{search_term} India" if "indeed" in site_names else search_term
+            term = search_term
+            country = "usa"
+            if "indeed" in site_names:
+                country = "india"
             config = jobspy_runner.JobSpyConfig(
                 site_names=site_names,
                 search_term=term,
                 location="India",
                 is_remote=is_remote,
                 results_wanted=15,
+                country_indeed=country,
             )
             try:
                 for job in jobspy_runner.scrape(config):

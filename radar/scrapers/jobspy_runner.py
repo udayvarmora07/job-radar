@@ -20,6 +20,7 @@ class JobSpyConfig(BaseModel):
     location: str = "India"
     is_remote: bool = True
     results_wanted: int = 20
+    country_indeed: str = "usa"
 
 
 def scrape(config: JobSpyConfig) -> Iterable[JobPost]:
@@ -31,6 +32,7 @@ def scrape(config: JobSpyConfig) -> Iterable[JobPost]:
             location=config.location,
             is_remote=config.is_remote,
             results_wanted=config.results_wanted,
+            country_indeed=config.country_indeed,
         )
     except Exception:
         log.error("JobSpy scrape failed for %s", config.site_names)
