@@ -76,7 +76,7 @@ def _load_from_db() -> list[dict]:
 
 
 def _scrape_and_filter() -> list[dict]:
-    """Re-scrape LinkedIn and return filtered + scored jobs."""
+    """Re-scrape LinkedIn + Naukri + Indeed, return filtered + scored jobs."""
     searches = [
         ("DevOps Engineer India Remote", True),
         ("SRE Engineer India Remote", True),
@@ -96,20 +96,28 @@ def _scrape_and_filter() -> list[dict]:
         ("SRE Engineer Bangalore Pune", False),
         ("Cloud Engineer Mumbai Bangalore", False),
     ]
+    # Multi-site scraping: linkedin + indeed (naukri blocked by captcha)
+    all_sites = [
+        (["linkedin"], searches),
+        (["indeed"], searches),
+    ]
     jobs: list[JobPost] = []
-    for search_term, is_remote in searches:
-        config = jobspy_runner.JobSpyConfig(
-            site_names=["linkedin"],
-            search_term=search_term,
-            location="India",
-            is_remote=is_remote,
-            results_wanted=15,
-        )
-        try:
-            for job in jobspy_runner.scrape(config):
-                jobs.append(job)
-        except Exception:
-            pass
+    for site_names, site_searches in all_sites:
+        for search_term, is_remote in site_searches:
+            # Indeed needs "India" in the search term
+            term = f"{search_term} India" if "indeed" in site_names and "india" not in search_term.lower() else search_term
+            config = jobspy_runner.JobSpyConfig(
+                site_names=site_names,
+                search_term=term,
+                location="India",
+                is_remote=is_remote,
+                results_wanted=15,
+            )
+            try:
+                for job in jobspy_runner.scrape(config):
+                    jobs.append(job)
+            except Exception:
+                pass
     filtered = filter_and_score(jobs)
     return [j.model_dump(mode="json") for j in filtered]
 
