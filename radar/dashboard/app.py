@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from radar.filters import filter_and_score
 from radar.models import JobPost
 from radar.scrapers import jobspy_runner
+from radar.scrapers.naukri_v2 import scrape as naukri_scrape
 
 log = logging.getLogger(__name__)
 
@@ -76,41 +77,37 @@ def _load_from_db() -> list[dict]:
 
 
 def _scrape_and_filter() -> list[dict]:
-    """Re-scrape LinkedIn + Naukri + Indeed, return filtered + scored jobs."""
+    """Re-scrape LinkedIn + Indeed + Naukri v2, return filtered + scored jobs."""
     searches = [
-        ("DevOps Engineer India Remote", True),
-        ("SRE Engineer India Remote", True),
-        ("Cloud Engineer India Remote", True),
-        ("Platform Engineer India Remote", True),
-        ("Site Reliability Engineer India Remote", True),
-        ("Kubernetes Engineer India Remote", True),
-        ("GitOps Engineer India Remote", True),
-        ("Infrastructure Engineer India Remote", True),
-        ("DevOps Engineer Bangalore", False),
-        ("DevOps Engineer Pune", False),
-        ("DevOps Engineer Hyderabad", False),
-        ("DevOps Engineer Chennai", False),
-        ("DevOps Engineer Mumbai", False),
-        ("DevOps Engineer Ahmedabad", False),
-        ("DevOps Engineer Noida Gurgaon", False),
-        ("SRE Engineer Bangalore Pune", False),
-        ("Cloud Engineer Mumbai Bangalore", False),
+        ("DevOps Engineer", True),
+        ("SRE Engineer", True),
+        ("Cloud Engineer", True),
+        ("Platform Engineer", True),
+        ("Site Reliability Engineer", True),
+        ("Kubernetes Engineer", True),
+        ("GitOps Engineer", True),
+        ("Infrastructure Engineer", True),
+        ("DevOps Engineer", False),  # city-based
+        ("SRE Engineer", False),
+        ("Cloud Engineer", False),
     ]
-    # Multi-site scraping: linkedin + indeed (naukri blocked by captcha)
+    # Multi-site scraping: linkedin + indeed + naukri v2
     all_sites = [
         (["linkedin"], searches),
         (["indeed"], searches),
     ]
+
     jobs: list[JobPost] = []
+
+    # LinkedIn + Indeed
     for site_names, site_searches in all_sites:
         for search_term, is_remote in site_searches:
-            term = search_term
             country = "usa"
             if "indeed" in site_names:
                 country = "india"
             config = jobspy_runner.JobSpyConfig(
                 site_names=site_names,
-                search_term=term,
+                search_term=search_term,
                 location="India",
                 is_remote=is_remote,
                 results_wanted=15,
@@ -121,6 +118,17 @@ def _scrape_and_filter() -> list[dict]:
                     jobs.append(job)
             except Exception:
                 pass
+
+    # Naukri v2 (3 pages per keyword, 20 per page = 60 per keyword)
+    for keyword, is_remote in searches:
+        if is_remote:
+            continue  # Naukri v2 doesn't have remote flag
+        try:
+            for job in naukri_scrape(keyword=keyword, pages=3):
+                jobs.append(job)
+        except Exception:
+            pass
+
     filtered = filter_and_score(jobs)
     return [j.model_dump(mode="json") for j in filtered]
 
