@@ -15,7 +15,7 @@ class JobPost(BaseModel):
     title: str = Field(description="Job title as shown on the ATS board")
     location: str = Field(default="Unknown")
     url: str = Field(description="Direct link to the job posting")
-    external_id: str = Field(description="ATS-specific job ID for deduping")
+    external_id: str = Field(min_length=1, description="ATS-specific job ID for deduping")
     posted_at: Optional[str] = Field(default=None, description="ISO 8601 date string when posted")
     description: str = Field(default="", max_length=5000)
     score: int = Field(default=0, description="Skill keyword overlap score (0-100)")

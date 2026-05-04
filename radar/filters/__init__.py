@@ -62,7 +62,8 @@ EXCLUDE_LOCATION = re.compile(
 
 # Soft-exclusion keywords in title
 EXCLUDE_TITLEKW = re.compile(
-    r"intern(?:ship)?|fresher|\bfresher\b|contract\s*(?!devops|sre|cloud)",
+    r"intern(?:ship)?|fresher|\bfresher\b|"
+    r"contract\s+(?!devops\b|sre\b|cloud\b)",
     re.IGNORECASE,
 )
 

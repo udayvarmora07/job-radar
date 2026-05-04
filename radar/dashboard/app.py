@@ -171,16 +171,15 @@ async def index():
         return f.read()
 
 
-@app.get("/api/jobs")
-async def list_jobs(
-    q: Optional[str] = Query(None),
-    location: Optional[str] = Query(None),
-    tier: Optional[str] = Query(None),
-    sort: Optional[str] = Query("score"),
-    source: Optional[str] = Query(None, description="Filter by source: linkedin, indeed, naukri_v2"),
-):
-    jobs = _get_jobs()
-
+def _filter_and_sort_jobs(
+    jobs: list[dict],
+    q: Optional[str] = None,
+    location: Optional[str] = None,
+    tier: Optional[str] = None,
+    sort: Optional[str] = "score",
+    source: Optional[str] = None,
+) -> list[dict]:
+    """Apply query, location, tier, source filters and sort to a job list."""
     if q:
         q_lower = q.lower()
         jobs = [j for j in jobs
@@ -215,6 +214,19 @@ async def list_jobs(
     else:
         jobs.sort(key=lambda j: j.get("score") or 0, reverse=True)
 
+    return jobs
+
+
+@app.get("/api/jobs")
+async def list_jobs(
+    q: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+    tier: Optional[str] = Query(None),
+    sort: Optional[str] = Query("score"),
+    source: Optional[str] = Query(None, description="Filter by source: linkedin, indeed, naukri_v2"),
+):
+    jobs = _get_jobs()
+    jobs = _filter_and_sort_jobs(jobs, q=q, location=location, tier=tier, sort=sort, source=source)
     return JSONResponse(content={"count": len(jobs), "jobs": jobs})
 
 
